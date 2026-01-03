@@ -207,8 +207,16 @@ void loop() {
     if (abs(forward) < DEADZONE) forward = 0;
     if (abs(turn) < DEADZONE)    turn = 0;
 
-    int leftSpeed  = constrain(forward + turn,  -127, 127);
-    int rightSpeed = constrain(forward - turn, -127, 127);
+    int leftSpeed  = forward + turn;
+    int rightSpeed = forward - turn;
+    
+    // Smart scaling to prevent clipping
+    int maxMotor = max(abs(leftSpeed), abs(rightSpeed));
+    if (maxMotor > 127) {
+        float scale = 127.0 / maxMotor;
+        leftSpeed  = (int)(leftSpeed * scale);
+        rightSpeed = (int)(rightSpeed * scale);
+    }
 
     /* ---- DEBUG VALUES ---- */
     static uint32_t dbgT = 0;
