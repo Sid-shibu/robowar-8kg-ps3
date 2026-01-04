@@ -36,9 +36,16 @@ bool killActive = false;
 bool prevStart  = false;
 bool prevSelect = false;
 
+/* ---- PS3 Reconnection Settings ---- */
+unsigned long lastDisconnectTime = 0;
+unsigned long reconnectInterval = 5000;  // Try to reconnect every 5 seconds
+bool isSearching = false;
+
 /* ================= FUNCTION PROTOTYPES ================= */
 void stopMotors();
 void driveBTS(int rpwm_ch, int lpwm_ch, int speed);
+void startPS3Search();
+void handlePS3Disconnection();
 
 /* ================= PS3 CALLBACK ================= */
 void onConnect() {
@@ -47,6 +54,27 @@ void onConnect() {
         Serial.println("✅ PS3 CONTROLLER CONNECTED - READY TO ARM!");
         Serial.println("Press START button to ARM the robot");
         alreadyConnected = true;
+    }
+    isSearching = false;  // Stop searching once connected
+}
+
+/* ================= PS3 AUTO-RECONNECT FUNCTIONS ================= */
+void startPS3Search() {
+    if (!isSearching) {
+        Serial.println("🔍 Starting PS3 controller search...");
+        isSearching = true;
+        lastDisconnectTime = millis();
+    }
+}
+
+void handlePS3Disconnection() {
+    // Check if enough time has passed since disconnection
+    unsigned long currentTime = millis();
+    
+    if (currentTime - lastDisconnectTime >= reconnectInterval) {
+        Serial.println("🔄 Attempting to reconnect PS3 controller...");
+        Ps3.begin("50:F1:CD:C2:DD:BC");  // Restart the search with the same MAC
+        lastDisconnectTime = currentTime;  // Reset timer for next attempt
     }
 }
 
@@ -138,16 +166,26 @@ void loop() {
     bool nowConn = Ps3.isConnected();
 
     if (nowConn != lastConn) {
-        Serial.println(nowConn ? "🔵 PS3 CONNECTED" : "🔴 PS3 DISCONNECTED");
+        if (nowConn) {
+            Serial.println("🔵 PS3 CONNECTED");
+            isSearching = false;  // Stop auto-reconnect search
+        } else {
+            Serial.println("🔴 PS3 DISCONNECTED");
+            startPS3Search();  // Start auto-reconnection attempts
+        }
         lastConn = nowConn;
         Serial.print("Robot Status - ARMED: "); Serial.print(robotArmed);
         Serial.print(" | KILL: "); Serial.println(killActive);
     }
 
+    // Handle auto-reconnection attempts when disconnected
+    if (!nowConn && isSearching) {
+        handlePS3Disconnection();
+    }
+
     if (!Ps3.isConnected()) {
         stopMotors();
-        Serial.println("Waiting for controller...");
-        delay(500);
+        delay(50);
         return;
     }
 
